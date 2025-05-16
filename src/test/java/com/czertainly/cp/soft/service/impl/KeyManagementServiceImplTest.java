@@ -7,10 +7,7 @@ import com.czertainly.api.model.common.enums.cryptography.KeyAlgorithm;
 import com.czertainly.api.model.common.enums.cryptography.KeyType;
 import com.czertainly.api.model.connector.cryptography.key.CreateKeyRequestDto;
 import com.czertainly.api.model.connector.cryptography.key.KeyPairDataResponseDto;
-import com.czertainly.cp.soft.attribute.KeyAttributes;
-import com.czertainly.cp.soft.attribute.MLDSAKeyAttributes;
-import com.czertainly.cp.soft.attribute.MLKEMAttributes;
-import com.czertainly.cp.soft.attribute.SLHDSAKeyAttributes;
+import com.czertainly.cp.soft.attribute.*;
 import com.czertainly.cp.soft.collection.*;
 import com.czertainly.cp.soft.dao.entity.KeyData;
 import com.czertainly.cp.soft.dao.entity.TokenInstance;
@@ -20,6 +17,7 @@ import com.czertainly.cp.soft.exception.TokenInstanceException;
 import com.czertainly.cp.soft.service.KeyManagementService;
 import com.czertainly.cp.soft.util.KeyStoreUtil;
 import jakarta.transaction.Transactional;
+import org.bouncycastle.pqc.jcajce.spec.HQCParameterSpec;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -191,6 +189,34 @@ class KeyManagementServiceImplTest {
         attributes.add(keyAlgorithm);
 
         return attributes;
+    }
+
+    @Test
+    void testGeneratingHQCKey() throws NotFoundException, UnrecoverableKeyException, KeyStoreException, NoSuchAlgorithmException {
+        CreateKeyRequestDto createKeyRequestDto = new CreateKeyRequestDto();
+        String alias = "alias";
+        List<RequestAttributeDto> createKeyAttributes = new ArrayList<>(getCreateKeyCommonAttributes(alias, KeyAlgorithm.HQC.getCode()));
+
+        RequestAttributeDto hqcLevel = new RequestAttributeDto();
+        hqcLevel.setName(HQCKeyAttributes.ATTRIBUTE_DATA_HQC_LEVEL);
+        hqcLevel.setContentType(AttributeContentType.INTEGER);
+
+        IntegerAttributeContent hqcLevelContent = new IntegerAttributeContent();
+        hqcLevelContent.setReference(HQCSecurityCategory.CATEGORY_3.name());
+        hqcLevelContent.setData(HQCSecurityCategory.CATEGORY_3.getNistSecurityCategory());
+        hqcLevel.setContent(List.of(hqcLevelContent));
+        createKeyAttributes.add(hqcLevel);
+
+        createKeyRequestDto.setCreateKeyAttributes(createKeyAttributes);
+
+        KeyPairDataResponseDto keyPairDataResponseDto = keyManagementService.createKeyPair(tokenInstance.getUuid(), createKeyRequestDto);
+        Assertions.assertEquals(KeyAlgorithm.HQC, keyPairDataResponseDto.getPrivateKeyData().getKeyData().getAlgorithm());
+        Assertions.assertEquals(KeyAlgorithm.HQC, keyPairDataResponseDto.getPublicKeyData().getKeyData().getAlgorithm());
+
+        KeyStore keyStore = KeyStoreUtil.loadKeystore(tokenInstance.getData(), PASSWORD);
+        Key privateKey;
+        Assertions.assertNotNull(privateKey = keyStore.getKey(alias, PASSWORD.toCharArray()));
+        Assertions.assertEquals(HQCParameterSpec.hqc192.getName(), privateKey.getAlgorithm());
     }
 
     @Test

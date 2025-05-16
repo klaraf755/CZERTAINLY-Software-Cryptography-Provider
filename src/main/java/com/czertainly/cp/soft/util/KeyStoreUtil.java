@@ -16,6 +16,8 @@ import org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8EncryptorBuilder;
 import org.bouncycastle.operator.*;
 import org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo;
 import org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfoBuilder;
+import org.bouncycastle.pqc.jcajce.provider.BouncyCastlePQCProvider;
+import org.bouncycastle.pqc.jcajce.provider.hqc.BCHQCPublicKey;
 import org.bouncycastle.pqc.jcajce.spec.FalconParameterSpec;
 
 import java.io.ByteArrayInputStream;
@@ -292,6 +294,43 @@ public class KeyStoreUtil {
             throw new IllegalStateException("Cannot generate ML-KEM Private Key Info", e);
         } catch (OperatorCreationException e) {
             throw new IllegalStateException("Cannot build encryptor for ML-KEM Private Key Info", e);
+        }
+    }
+
+    public static BCHQCPublicKey generateHQCKey(KeyStore keyStore, String alias, HQCSecurityCategory securityCategory, String password) {
+        try {
+            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("HQC", BouncyCastlePQCProvider.PROVIDER_NAME);
+            keyPairGenerator.initialize(securityCategory.getParameterSet());
+
+            KeyPair keyPair = keyPairGenerator.generateKeyPair();
+
+            // Store Private Key as Encrypted Private Key Info
+            byte[] encoded = keyPair.getPrivate().getEncoded();
+            PrivateKeyInfo originalInfo = PrivateKeyInfo.getInstance(encoded);
+            JceOpenSSLPKCS8EncryptorBuilder encryptorBuilder = new JceOpenSSLPKCS8EncryptorBuilder(PKCS8Generator.PBE_SHA1_3DES).setPassword(password.toCharArray());
+            OutputEncryptor oe = encryptorBuilder.build();
+            PKCS8EncryptedPrivateKeyInfo encryptedPrivateKeyInfo = new PKCS8EncryptedPrivateKeyInfoBuilder(originalInfo).build(oe);
+            keyStore.setKeyEntry(alias, encryptedPrivateKeyInfo.getEncoded(), null);
+
+            PublicKey publicKey = keyPair.getPublic();
+            if (!(publicKey instanceof BCHQCPublicKey)) {
+                throw new IllegalStateException("Generated public key is not of type BCHQCPublicKey");
+            }
+            return (BCHQCPublicKey) publicKey;
+
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("HQC algorithm not found", e);
+        } catch (NoSuchProviderException e) {
+            throw new IllegalStateException(PROVIDER_NOT_FOUND, e);
+
+        } catch (InvalidAlgorithmParameterException e) {
+            throw new IllegalStateException("Invalid HQC algorithm parameters", e);
+        } catch (KeyStoreException e) {
+            throw new IllegalStateException("Cannot generate HQC key", e);
+        } catch (IOException e) {
+            throw new IllegalStateException("Cannot generate HQC Private Key Info", e);
+        } catch (OperatorCreationException e) {
+            throw new IllegalStateException("Cannot build encryptor for HQC Private Key Info", e);
         }
     }
 

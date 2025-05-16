@@ -14,6 +14,7 @@ import com.czertainly.api.model.connector.cryptography.key.KeyPairDataResponseDt
 import com.czertainly.api.model.connector.cryptography.key.value.CustomKeyValue;
 import com.czertainly.api.model.connector.cryptography.key.value.KeyValue;
 import com.czertainly.api.model.connector.cryptography.key.value.RawKeyValue;
+import com.czertainly.api.model.connector.cryptography.key.value.SpkiKeyValue;
 import com.czertainly.core.util.AttributeDefinitionUtils;
 import com.czertainly.cp.soft.attribute.*;
 import com.czertainly.cp.soft.collection.*;
@@ -28,6 +29,7 @@ import com.czertainly.cp.soft.util.KeyStoreUtil;
 import jakarta.transaction.Transactional;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.bouncycastle.jcajce.provider.asymmetric.mlkem.BCMLKEMPublicKey;
+import org.bouncycastle.pqc.jcajce.provider.hqc.BCHQCPublicKey;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -257,6 +259,27 @@ public class KeyManagementServiceImpl implements KeyManagementService {
 
                 // prepare private key
                 privateKey = createAndSaveKeyData(alias, association, KeyType.PRIVATE_KEY, KeyAlgorithm.MLKEM,
+                        KeyFormat.CUSTOM, customKeyValue, securityCategory.getPrivateKeySize(), metadata, tokenInstance.getUuid());
+
+            }
+            case HQC -> {
+                final HQCSecurityCategory securityCategory = HQCSecurityCategory.valueOf(
+                        AttributeDefinitionUtils.getSingleItemAttributeContentValue(
+                                        HQCKeyAttributes.ATTRIBUTE_DATA_HQC_LEVEL, request.getCreateKeyAttributes(), IntegerAttributeContent.class)
+                                .getData()
+                );
+
+                BCHQCPublicKey kemPublicKey =  KeyStoreUtil.generateHQCKey(keyStore, alias, securityCategory, tokenInstance.getCode());
+                SpkiKeyValue keyValue = new SpkiKeyValue(Base64.getEncoder().encodeToString(kemPublicKey.getEncoded()));
+                publicKey = createAndSaveKeyData(alias, association, KeyType.PUBLIC_KEY, KeyAlgorithm.HQC, KeyFormat.SPKI, keyValue, securityCategory.getPublicKeySize(), metadata, tokenInstance.getUuid());
+
+                CustomKeyValue customKeyValue = new CustomKeyValue();
+                HashMap<String, String> customKeyValues = new HashMap<>();
+                customKeyValues.put("securityCategory", String.valueOf(securityCategory.getNistSecurityCategory()));
+                customKeyValue.setValues(customKeyValues);
+
+                // prepare private key
+                privateKey = createAndSaveKeyData(alias, association, KeyType.PRIVATE_KEY, KeyAlgorithm.HQC,
                         KeyFormat.CUSTOM, customKeyValue, securityCategory.getPrivateKeySize(), metadata, tokenInstance.getUuid());
 
             }
